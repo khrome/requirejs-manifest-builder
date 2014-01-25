@@ -1,0 +1,33 @@
+{
+    "name": "requirejs-manifest-builder",
+    "homepage": "https://github.com/khrome/requirejs-manifest-builder",
+    "version": "0.0.1-alpha",
+    "main": "builder.js",
+    "description": "A utility for mapping a set of UMD NPMs into a requirejs config file",
+    "keywords": [
+        "requirejs",
+        "npm"
+    ],
+    "author": "Abbey Hawk Sparrow <@khrome> (http://patternweaver.com)",
+    "contributors": [],
+    "bugs": {
+        "url": "https://github.com/khrome/requirejs-manifest-builder/issues"
+    },
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/khrome/requirejs-manifest-builder.git"
+    },
+    "dependencies": {
+        "async-arrays": "*"
+    },
+    "devDependencies": {
+        "mocha": "*",
+        "should": "*"
+    },
+    "optionalDependencies": {
+    },
+    "engines": {
+        "node": "*"
+    }
+}
