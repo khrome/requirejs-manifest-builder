@@ -1,6 +1,6 @@
 requirejs-manifest-builder.js
 ==============
-NPM is such a versatile solution, of course it works for frontend resources, so here's a commonjs manifest generator so you can register all those node modules right where they live. 
+NPM is such a versatile solution, of course it works for frontend resources, so here's a requirejs manifest generator so you can register all those node modules right where they live. 
 
 Script Usage
 ------------
