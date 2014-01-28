@@ -1,4 +1,4 @@
-require('async-arrays');
+var arrays = require('async-arrays');
 var fs = require('fs');
 
 function ManifestBuilder(options){
@@ -10,7 +10,7 @@ ManifestBuilder.prototype = {
     localModules : function(callback){
         var modules = {};
         fs.readdir('./node_modules/', function(err, files){
-            files.forAllEmissions(function(file, index, done){
+            arrays.forAllEmissions(files, function(file, index, done){
                 var packageFile = './node_modules/'+file+'/package.json';
                 fs.exists(packageFile, function(exists){ 
                     if(exists){

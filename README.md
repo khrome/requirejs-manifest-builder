@@ -5,12 +5,16 @@ NPM is such a versatile solution, of course it works for frontend resources, so 
 Script Usage
 ------------
 
-To use it on the command line it's just `requirejs-mainfest [node_directory] manifest_path`
+(Soon™)To use it on the command line it's just `requirejs-mainfest [node_directory] manifest_path`
 
 Programatic Usage
 -----------------
 
-coming soon
+    var builderClass = require('requirejs-manifest-builder');
+    var builder = new builderClass();
+    builder.buildManifest(function(err, manifest){
+        //do stuff
+    });
 
 Testing
 -------
