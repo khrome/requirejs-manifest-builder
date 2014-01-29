@@ -45,7 +45,11 @@ ManifestBuilder.prototype = {
       };
         this.localModules(function(err, modules){
             Object.keys(modules).forEach(function(name){
-                entries.paths[name] = modules[name].location+modules[name].main;
+                var moduleName = modules[name].browserMain || modules[name].main;
+                var nn = (moduleName.substr(-3, 3).toLowerCase() === '.js') ? 
+                    moduleName.substr(0, moduleName.length-3) :
+                    moduleName;
+                entries.paths[name] = modules[name].location+nn;
             });
             callback(undefined, entries);
         });
