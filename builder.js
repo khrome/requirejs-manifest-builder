@@ -45,7 +45,7 @@ ManifestBuilder.prototype = {
       };
         this.localModules(function(err, modules){
             Object.keys(modules).forEach(function(name){
-                var moduleName = modules[name].browserMain || modules[name].main;
+                var moduleName = modules[name].browserMain || modules[name].main || 'index.js';
                 var nn = (moduleName.substr(-3, 3).toLowerCase() === '.js') ? 
                     moduleName.substr(0, moduleName.length-3) :
                     moduleName;

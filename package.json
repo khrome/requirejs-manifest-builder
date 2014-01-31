@@ -1,7 +1,7 @@
 {
     "name": "requirejs-manifest-builder",
     "homepage": "https://github.com/khrome/requirejs-manifest-builder",
-    "version": "0.0.2-alpha",
+    "version": "0.0.3-alpha",
     "main": "builder.js",
     "description": "A utility for mapping a set of UMD NPMs into a requirejs config file",
     "keywords": [
