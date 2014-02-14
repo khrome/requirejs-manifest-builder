@@ -13,7 +13,7 @@ ManifestBuilder.prototype = {
     localModules : function(options, callback){
         if(typeof options == 'function'){
             callback = options;
-            options = { directory : './node_modules/' };
+            options = { directory : __dirname + '/node_modules/' };
         }
         var modules = {};
         fs.readdir(options.directory, function(err, files){
