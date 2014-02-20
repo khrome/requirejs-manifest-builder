@@ -13,7 +13,7 @@ ManifestBuilder.prototype = {
     localModules : function(options, callback){
         if(typeof options == 'function'){
             callback = options;
-            options = { directory : __dirname + '/node_modules/' };
+            options = { directory : (options.directory || './')+'node_modules/' };
         }
         var modules = {};
         fs.readdir(options.directory, function(err, files){
@@ -57,25 +57,137 @@ ManifestBuilder.prototype = {
             },
             waitSeconds: 15
         };
+        var handlers = {
+            css : function(file, done){
+                done(undefined, 'css!'+file);
+            },
+            js : function(file, done){
+                done(undefined, file);
+            },
+            less : function(file, done){
+                transcode.less.css(function(err, filename, shimPrefix){
+                    done(err, shimPrefix+filename);
+                });
+            },
+            scss : function(){
+                transcode.scss.css(function(err, filename, shimPrefix){
+                    done(err, shimPrefix+filename);
+                });
+            }
+            //.coffee?
+            //.json?
+            //.html?
+            //.jpg/.gif/.png? as base64?
+            //.mp4?
+        };
+        var transcode = {
+            less : {
+                css : function(file, callback){
+                    loadFile(function(err, body, path, typeless){
+                        var fullpath = path + file;
+                        try{
+                            var parser = new(less.Parser)({
+                                paths: [path], // Specify search paths for @import directives
+                                filename: fullpath // Specify a filename, for better error messages
+                            });
+                            parser.parse(body, function (error, tree) {
+                                if(error) writeFile(file, '/* ERROR : '+error.message+'*'+'/', callback);
+                                else{
+                                    try{
+                                        writeFile(
+                                            file, 
+                                            tree.toCSS({ compress: options.compact || false }), 
+                                            callback, 
+                                            'css!'
+                                        ); 
+                                    }catch(ex){ writeFile(file, '/* ERROR : '+ex.message+'*'+'/', callback); }
+                                }
+                            });
+                        }catch(ex){
+                            handler(file, '/* ERROR : '+ex.message+'*'+'/', callback);
+                        }
+                    });
+                }
+            },
+            scss : {
+                css : function(file, callback){
+                    loadFile(function(err, body, path, typeless){
+                        var fullpath = path + file;
+                        try{
+                            sass.render(body.toString(), function (error, css) {
+                                if(error) handler(resource, '/* ERROR : '+error.message+'*'+'/', callback);
+                                else writeFile(file, css, callback, 'css!');
+                            });
+                        }catch(ex){
+                            writeFile(file, '/* ERROR : '+ex.message+'*'+'/', callback);
+                        }
+                    });
+                }
+            }
+        };
+        var path = function(mode){
+            mode = (mode || 'local').toLowerCase();
+            switch(mode){
+                case 'local':
+                    var path = process.cwd()+resource;
+                    var parts = path.split('/');
+                    parts.pop();
+                    return parts.join('/');
+                    break;
+                case 'global':
+                    return __dirname;
+                    break;
+                default : return mode; //if we don't know, it must be a path
+            }
+        }
+        var readFile = function(filename, callback){
+            fs.readFile(filename, function(err, body){
+                if(err) return callback(err);
+                var path = path('local');
+                var parts = filename.split('.');
+                parts.pop();
+                var typeless = parts.join('.');
+                callback(err, body, path, typeless);
+            });
+        }
+        var writeFile = function(filename, body, callback, shimType){
+            shimType = shimType || '';
+            fs.writeFile(filename, body, function(err){
+                callback(err, filename, shimType);
+            });
+        }
+        var endsWith = function(substr, str){
+            return str.substring(str.length - substr.length) === substr;
+        };
         var ob = this;
         this.localModules(function(err, modules){
-            Object.keys(modules).forEach(function(name){
+            var moduleNames = Object.keys(modules);
+            arrays.forAllEmissions(moduleNames, function(name, key, complete){
                 var moduleName = modules[name].browserMain || modules[name].main || 'index.js';
                 var nn = (moduleName.substr(-3, 3).toLowerCase() === '.js') ? 
                     moduleName.substr(0, moduleName.length-3) :
                     moduleName;
                 entries.paths[name] = modules[name].location+nn;
                 var shim = {};
-                if(modules[name].resources) modules[name].resources.forEach(function(resource){
-                    if(resource.substr(resource.length -4, resource.length).toLowerCase() == '.css'){
-                        if(!shim.deps) shim.deps = [];
-                        shim.deps.push('css!'+resource);
-                    }
+                if(modules[name].resources) arrays.forAllEmissions(modules[name].resources, function(resource, index, done){
+                    Object.keys(handlers).forEach(function(typeName){
+                        if(endsWith('.'+typeName, resource.toLowerCase())){
+                            handlers[typeName]('./node_modules/'+name+'/'+resource, function(err, shimPath){
+                                if(!shim.deps) shim.deps = [];
+                                shim.deps.push(shimPath);
+                                done();
+                            });
+                        }
+                    });
+                    if(shim.deps) entries.shim[name] = shim;
+                }, function(){
+                    complete();
                 });
-                if(shim.deps) entries.shim[name] = shim;
+                else complete();
+            }, function(){
+                if(options.cacheable) ob.cache[process.cwd()] = entries;
+                callback(undefined, entries);
             });
-            if(options.cacheable) ob.cache[process.cwd()] = entries;
-            callback(undefined, entries);
         });
     },
     saveNewManifest : function(filename, options, callback){
