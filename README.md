@@ -1,11 +1,6 @@
 requirejs-manifest-builder.js
 ==============
-NPM is such a versatile solution, of course it works for frontend resources, so here's a requirejs manifest generator so you can register all those node modules right where they live. 
-
-Script Usage
-------------
-
-(Soon™)To use it on the command line it's just `requirejs-mainfest [node_directory] manifest_path`
+NPM is such a versatile solution, of course it works for frontend resources, so here's a requirejs manifest generator so you can register all those node modules right where they live. It scans the node_modules directory in the project root(non-recursively) and generates the manfest for require.js. 
 
 Programatic Usage
 -----------------
@@ -15,6 +10,11 @@ Programatic Usage
     builder.buildManifest(function(err, manifest){
         //do stuff
     });
+    
+Resources
+---------
+
+To include non-UMD js or css add it to an array in the(nonstandard) `resources` entry in the module's package.json
 
 Testing
 -------
