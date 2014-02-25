@@ -10,7 +10,7 @@ describe('requirejs-mainifest-builder', function(){
             should.exist(manifest);
             should.exist(manifest.paths);
             should.exist(manifest.paths['async-arrays']);
-            manifest.paths['async-arrays'].should.equal('./node_modules/async-arrays/async-arrays.js');
+            manifest.paths['async-arrays'].should.equal('./node_modules/async-arrays/async-arrays');
             done();
         });
     });

@@ -69,7 +69,7 @@ ManifestBuilder.prototype = {
                     done(err, shimPrefix+filename);
                 });
             },
-            scss : function(){
+            scss : function(file, done){
                 transcode.scss.css(function(err, filename, shimPrefix){
                     done(err, shimPrefix+filename);
                 });
@@ -83,7 +83,7 @@ ManifestBuilder.prototype = {
         var transcode = {
             less : {
                 css : function(file, callback){
-                    loadFile(function(err, body, path, typeless){
+                    readFile(function(err, body, path, typeless){
                         var fullpath = path + file;
                         try{
                             var parser = new(less.Parser)({
@@ -111,7 +111,7 @@ ManifestBuilder.prototype = {
             },
             scss : {
                 css : function(file, callback){
-                    loadFile(function(err, body, path, typeless){
+                    readFile(function(err, body, path, typeless){
                         var fullpath = path + file;
                         try{
                             sass.render(body.toString(), function (error, css) {
@@ -169,21 +169,24 @@ ManifestBuilder.prototype = {
                     moduleName;
                 entries.paths[name] = modules[name].location+nn;
                 var shim = {};
-                if(modules[name].resources) arrays.forAllEmissions(modules[name].resources, function(resource, index, done){
-                    Object.keys(handlers).forEach(function(typeName){
-                        if(endsWith('.'+typeName, resource.toLowerCase())){
-                            handlers[typeName]('./node_modules/'+name+'/'+resource, function(err, shimPath){
-                                if(!shim.deps) shim.deps = [];
-                                shim.deps.push(shimPath);
-                                done();
-                            });
-                        }
+                if(modules[name].resources){
+                    arrays.forAllEmissions(modules[name].resources, function(resource, index, done){
+                        Object.keys(handlers).forEach(function(typeName){
+                            if(endsWith('.'+typeName, resource.toLowerCase())){
+                                handlers[typeName]('./node_modules/'+name+'/'+resource, function(err, shimPath){
+                                    if(!shim.deps) shim.deps = [];
+                                    shim.deps.push(shimPath);
+                                    done();
+                                });
+                            }
+                        });
+                        if(shim.deps) entries.shim[name] = shim;
+                    }, function(){
+                        complete();
                     });
-                    if(shim.deps) entries.shim[name] = shim;
-                }, function(){
+                }else{
                     complete();
-                });
-                else complete();
+                }
             }, function(){
                 if(options.cacheable) ob.cache[process.cwd()] = entries;
                 callback(undefined, entries);
