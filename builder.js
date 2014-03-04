@@ -175,7 +175,7 @@ ManifestBuilder.prototype = {
                             if(endsWith('.'+typeName, resource.toLowerCase())){
                                 handlers[typeName]('./node_modules/'+name+'/'+resource, function(err, shimPath){
                                     if(!shim.deps) shim.deps = [];
-                                    shim.deps.push(shimPath);
+                                    shim.deps[index] = shimPath;
                                     done();
                                 });
                             }
