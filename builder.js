@@ -178,10 +178,10 @@ ManifestBuilder.prototype = {
                                     shim.deps[index] = shimPath;
                                     done();
                                 });
-                            }
+                            }else done(); //short circuit if we don't understand the type
                         });
-                        if(shim.deps) entries.shim[name] = shim;
                     }, function(){
+                        if(shim.deps) entries.shim[name] = shim;
                         complete();
                     });
                 }else{
