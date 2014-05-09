@@ -1,0 +1,29 @@
+<DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript" src="require.js"></script>
+        <script type="text/javascript" src="requireplus.js"></script>
+        <script>
+            requirejs.config({
+                paths: {
+                    foo: 'test/foo'
+                },
+                shim: {
+                    foo: {
+                        process : function(name, module, config){
+                            console.log('p', name, module, config);
+                            return module;
+                        }
+                    }
+                }
+            })
+        </script>
+    </head>
+    <body>
+        <script>
+            require(['foo'], function(foo){
+                console.log('foo')
+            })
+        </script>
+    </body>
+</html>

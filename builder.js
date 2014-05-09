@@ -162,6 +162,7 @@ ManifestBuilder.prototype = {
         var ob = this;
         this.localModules(function(err, modules){
             var moduleNames = Object.keys(modules);
+            var FNs = [];
             arrays.forAllEmissions(moduleNames, function(name, key, complete){
                 var moduleName = modules[name].browserMain || modules[name].main || 'index.js';
                 var nn = (moduleName.substr(-3, 3).toLowerCase() === '.js') ? 
@@ -182,6 +183,25 @@ ManifestBuilder.prototype = {
                         });
                     }, function(){
                         if(shim.deps) entries.shim[name] = shim;
+                        var lines = [];
+                        if(options.process === true && modules[name].extensions){
+                            lines.push('var callbacks = [];');
+                            lines.push('require('+JSON.stringify(modules[name].extensions)+', function(){');
+                            lines.push(     'var cbs = callbacks;');
+                            lines.push(     'callbacks = false;');
+                            lines.push(     'cbs.forEach(function(cb){ cb(); });');
+                            lines.push('});');
+                            lines.push('module.extensions = {ready:function(cb){');
+                            lines.push(     'if(callbacks === false) cb();');
+                            lines.push(     'else callbacks.push(cb);');
+                            lines.push('}}');
+                            
+                        }
+                        if(lines.length){
+                            if(!entries.shim[name]) entries.shim[name] = {};
+                            entries.shim[name].process = '[['+FNs.length+']]';
+                            FNs.push(new Function('name', 'module', 'config', lines.join("\n")));
+                        }
                         complete();
                     });
                 }else{
@@ -189,6 +209,12 @@ ManifestBuilder.prototype = {
                 }
             }, function(){
                 if(options.cacheable) ob.cache[process.cwd()] = entries;
+                if(FNs.length){
+                    entries = JSON.stringify(entries);
+                    FNs.forEach(function(fn, index){
+                        entries = entries.replace("'[["+index+"]]'", fn.toString());
+                    });
+                }
                 callback(undefined, entries);
             });
         });
