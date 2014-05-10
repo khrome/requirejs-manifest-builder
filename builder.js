@@ -185,22 +185,36 @@ ManifestBuilder.prototype = {
                         if(shim.deps) entries.shim[name] = shim;
                         var lines = [];
                         if(options.process === true && modules[name].extensions){
+                            var exts = modules[name].extensions.map(function(value){
+                                if(value.indexOf('.') === -1) return value;
+                                return 'node_modules/'+name+'/'+value;
+                            });
+                            if(modules[name].extends) lines.push('window["'+modules[name].extends+'"] = module;');
                             lines.push('var callbacks = [];');
-                            lines.push('require('+JSON.stringify(modules[name].extensions)+', function(){');
+                            if(modules[name].extends) lines.push('define.amd = false;'); //here we turn off amd, so extensions are treated as browser objects
+                            if(modules[name].extends) lines.push('require.pause();'); //pause so UMDs we intend to to load as AMD aren't treated as globals
+                            lines.push('require.bypass('+JSON.stringify(exts)+', function(){'); //use bypass to load extensions
                             lines.push(     'var cbs = callbacks;');
                             lines.push(     'callbacks = false;');
                             lines.push(     'cbs.forEach(function(cb){ cb(); });');
+                            if(modules[name].extends) lines.push(     'require.resume();'); //clean up our mess
+                            if(modules[name].extends) lines.push(     'define.amd = true;');
+                            if(modules[name].extends) lines.push(     'delete window["'+modules[name].extends+'"];');
                             lines.push('});');
                             lines.push('module.extensions = {ready:function(cb){');
                             lines.push(     'if(callbacks === false) cb();');
                             lines.push(     'else callbacks.push(cb);');
                             lines.push('}}');
-                            
+                            lines.push('return module;');
                         }
                         if(lines.length){
                             if(!entries.shim[name]) entries.shim[name] = {};
                             entries.shim[name].process = '[['+FNs.length+']]';
                             FNs.push(new Function('name', 'module', 'config', lines.join("\n")));
+                        }
+                        if(modules[name].map){
+                            if(!entries.map) entries.map = {};
+                            entries.map[name] = modules[name].map;
                         }
                         complete();
                     });
@@ -210,9 +224,9 @@ ManifestBuilder.prototype = {
             }, function(){
                 if(options.cacheable) ob.cache[process.cwd()] = entries;
                 if(FNs.length){
-                    entries = JSON.stringify(entries);
+                    entries = JSON.stringify(entries, null, "\t");
                     FNs.forEach(function(fn, index){
-                        entries = entries.replace("'[["+index+"]]'", fn.toString());
+                        entries = entries.replace('"[['+index+']]"', fn.toString());
                     });
                 }
                 callback(undefined, entries);
