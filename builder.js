@@ -160,10 +160,11 @@ ManifestBuilder.prototype = {
             return str.substring(str.length - substr.length) === substr;
         };
         var ob = this;
+        var iterator = 'forEachEmission';
         this.localModules(function(err, modules){
             var moduleNames = Object.keys(modules);
             var FNs = [];
-            arrays.forAllEmissions(moduleNames, function(name, key, complete){
+            arrays[iterator](moduleNames, function(name, key, complete){
                 var moduleName = modules[name].browserMain || modules[name].main || 'index.js';
                 var nn = (moduleName.substr(-3, 3).toLowerCase() === '.js') ? 
                     moduleName.substr(0, moduleName.length-3) :
@@ -171,17 +172,29 @@ ManifestBuilder.prototype = {
                 entries.paths[name] = modules[name].location+nn;
                 var shim = {};
                 if(modules[name].resources){
-                    arrays.forAllEmissions(modules[name].resources, function(resource, index, done){
+                    arrays[iterator](modules[name].resources, function(resource, index, done){
+                        var found  = false;
+                        //console.log('here1');
                         Object.keys(handlers).forEach(function(typeName){
+                            //console.log('here2');
                             if(endsWith('.'+typeName, resource.toLowerCase())){
+                                //console.log('here3');
+                                found = true;
                                 handlers[typeName]('./node_modules/'+name+'/'+resource, function(err, shimPath){
                                     if(!shim.deps) shim.deps = [];
                                     shim.deps[index] = shimPath;
+                                    //console.log('handled '+resource, shim.deps.length);
                                     done();
                                 });
-                            }else done(); //short circuit if we don't understand the type
+                            }
                         });
+                        //console.log('handling '+resource, found, modules[name].resources.length);
+                        if(!found){
+                            //console.log('short circuit');
+                            done(); //short circuit if we don't understand the type
+                        }
                     }, function(){
+                        //console.log('something');
                         if(shim.deps) entries.shim[name] = shim;
                         var lines = [];
                         if(options.process === true && modules[name].extensions){
