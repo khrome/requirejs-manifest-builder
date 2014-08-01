@@ -165,7 +165,7 @@ ManifestBuilder.prototype = {
             var moduleNames = Object.keys(modules);
             var FNs = [];
             arrays[iterator](moduleNames, function(name, key, complete){
-                var moduleName = modules[name].browserMain || modules[name].main || 'index.js';
+                var moduleName = modules[name].browserMain || modules[name].browserify || modules[name].main || 'index.js';
                 var nn = (moduleName.substr(-3, 3).toLowerCase() === '.js') ? 
                     moduleName.substr(0, moduleName.length-3) :
                     moduleName;
