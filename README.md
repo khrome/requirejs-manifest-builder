@@ -17,6 +17,8 @@ Resources
 
 To include non-UMD js or css add it to an array in the(nonstandard) `resources` entry in the module's package.json
 
+If you include a .less asset it will be rendered and stored in an in-memory cache, then shipped to the client as css
+
 Extensions
 ----------
 
@@ -72,6 +74,11 @@ Testing
 Tests use mocha/should to execute the tests from root
 
     mocha
+
+Disclaimer
+----------
+
+This is not an official Google product.
 
 If you find any rough edges, please submit a bug!
 

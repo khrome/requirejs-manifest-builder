@@ -1,4 +1,5 @@
 var arrays = require('async-arrays');
+var objects = require('async-objects');
 var fs = require('fs');
 var less = require('less');
 var sass = require('node-sass');
@@ -7,7 +8,7 @@ function ManifestBuilder(options){
     this.options = options || {};
     this.cache = {};
 }
-
+var lessCache = {};
 ManifestBuilder.prototype = {
     constructor : ManifestBuilder,
     localModules : function(options, callback){
@@ -65,12 +66,18 @@ ManifestBuilder.prototype = {
                 done(undefined, file);
             },
             less : function(file, done){
-                transcode.less.css(function(err, filename, shimPrefix){
-                    done(err, shimPrefix+filename);
-                });
+                if(lessCache[file]){
+                    done(undefined, lessCache[file]);
+                }else{
+                    transcode.less.css(file, function(err, filename, shimPrefix){
+                        lessCache[file] = shimPrefix+filename;
+                        done(err, shimPrefix+filename);
+                    });
+                }
             },
             scss : function(file, done){
-                transcode.scss.css(function(err, filename, shimPrefix){
+                transcode.scss.css(file, function(err, filename, shimPrefix){
+                    lessCache[file] = shimPrefix+filename;
                     done(err, shimPrefix+filename);
                 });
             }
@@ -80,38 +87,61 @@ ManifestBuilder.prototype = {
             //.jpg/.gif/.png? as base64?
             //.mp4?
         };
+        
+        var symlinkCache = {};
+        
         var transcode = {
             less : {
                 css : function(file, callback){
-                    readFile(function(err, body, path, typeless){
-                        var fullpath = path + file;
+                    readFile(file, function(err, body, path, typeless){
+                        if(file[0] === '.') file = file.substring(1);
+                        //var fullpath = path + file;
+                        var dir = path;
+                        file = file.split('/');
+                        file = file.pop();
+                        //if(fullpath.substring(-1))
+                        var paths = ['.', dir];
+                        fs.realpath(dir, symlinkCache, function (err, resolvedPath) {
+                            paths = ['.', resolvedPath];
                         try{
                             var parser = new(less.Parser)({
-                                paths: [path], // Specify search paths for @import directives
-                                filename: fullpath // Specify a filename, for better error messages
+                                paths: paths, // Specify search paths for @import directives
+                                relativeUrls : true,
+                                filename: resolvedPath+'/'+file // Specify a filename, for better error messages
                             });
+                            //console.log(parser);
                             parser.parse(body, function (error, tree) {
-                                if(error) writeFile(file, '/* ERROR : '+error.message+'*'+'/', callback);
-                                else{
+                                var newFile = file+'.css';
+                                if(error){
+                                    console.log('LESS rendering error!');
+                                    console.log(error);
+                                    writeFile(newFile, '/* ERROR : '+error.message+'*'+'/', callback);
+                                }else{
                                     try{
                                         writeFile(
-                                            file, 
+                                            newFile, 
                                             tree.toCSS({ compress: options.compact || false }), 
                                             callback, 
                                             'css!'
-                                        ); 
-                                    }catch(ex){ writeFile(file, '/* ERROR : '+ex.message+'*'+'/', callback); }
+                                        );
+                                        console.log('RENDERED LESS: '+newFile);
+                                    }catch(ex){
+                                        console.log(ex);
+                                        writeFile(newFile, '/* ERROR : '+ex.message+'*'+'/', callback);
+                                    }
                                 }
                             });
                         }catch(ex){
+                            console.log(ex);
                             handler(file, '/* ERROR : '+ex.message+'*'+'/', callback);
                         }
+                        });
                     });
                 }
             },
             scss : {
                 css : function(file, callback){
-                    readFile(function(err, body, path, typeless){
+                    readFile(file, function(err, body, path, typeless){
                         var fullpath = path + file;
                         try{
                             sass.render(body.toString(), function (error, css) {
@@ -125,29 +155,31 @@ ManifestBuilder.prototype = {
                 }
             }
         };
-        var path = function(mode){
+        var getPath = function(mode, resource){
             mode = (mode || 'local').toLowerCase();
+            var result = mode;
             switch(mode){
                 case 'local':
-                    var path = process.cwd()+resource;
+                    if(resource[0] === '.' && resource[1] === '/') resource = resource.substring(2);
+                    var path = process.cwd()+'/'+resource;
                     var parts = path.split('/');
                     parts.pop();
-                    return parts.join('/');
+                    result = parts.join('/');
                     break;
                 case 'global':
-                    return __dirname;
+                    result = __dirname;
                     break;
-                default : return mode; //if we don't know, it must be a path
             }
+            return result;
         }
         var readFile = function(filename, callback){
             fs.readFile(filename, function(err, body){
                 if(err) return callback(err);
-                var path = path('local');
+                var path = getPath('local', filename);
                 var parts = filename.split('.');
                 parts.pop();
                 var typeless = parts.join('.');
-                callback(err, body, path, typeless);
+                callback(err, body.toString?body.toString():body, path, typeless);
             });
         }
         var writeFile = function(filename, body, callback, shimType){
@@ -174,11 +206,8 @@ ManifestBuilder.prototype = {
                 if(modules[name].resources){
                     arrays[iterator](modules[name].resources, function(resource, index, done){
                         var found  = false;
-                        //console.log('here1');
                         Object.keys(handlers).forEach(function(typeName){
-                            //console.log('here2');
                             if(endsWith('.'+typeName, resource.toLowerCase())){
-                                //console.log('here3');
                                 found = true;
                                 handlers[typeName]('./node_modules/'+name+'/'+resource, function(err, shimPath){
                                     if(!shim.deps) shim.deps = [];
