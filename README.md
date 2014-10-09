@@ -8,7 +8,7 @@ Programatic Usage
 
     var builderClass = require('requirejs-manifest-builder');
     var builder = new builderClass();
-    builder.buildManifest(function(err, manifest, modules){
+    builder.buildManifest(function(err, manifest, output){
         //do stuff
     });
     
@@ -18,6 +18,23 @@ Resources
 To include non-UMD js or css add it to an array in the(nonstandard) `resources` entry in the module's package.json
 
 If you include a .less asset it will be rendered and stored in an in-memory cache, then shipped to the client as css
+
+Polymer
+-------
+
+In addition to requirejs configuration, you can also output your modules as [Polymer](https://www.polymer-project.org/) components. This is done via the nonstandard `polymer` entry in the package.json. An example would look like:
+
+    polymer : {
+        extends : 'tray',
+        noscript : false,
+        template : 'stuff.html',
+        style : 'mystyle.less',
+        script : 'polymer-script.js'
+    }
+
+note that constructor is not an option and is based on the package.json's name for clarity. In this way you get a clean blending of polymer, UMD or traditional scripts.
+
+Any components from the process will be in `output.polymer` and can then be dropped onto the index page.
 
 Extensions
 ----------

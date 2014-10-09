@@ -9,6 +9,8 @@ function ManifestBuilder(options){
     this.cache = {};
 }
 var lessCache = {};
+var polymerCache = {};
+var glob = {};
 ManifestBuilder.prototype = {
     constructor : ManifestBuilder,
     localModules : function(options, callback){
@@ -19,7 +21,6 @@ ManifestBuilder.prototype = {
         var modules = {};
         fs.readdir(options.directory, function(err, files){
             if(err) throw err;
-            //console.log('!!', files);
             arrays.forAllEmissions(files, function(file, index, done){
                 var packageFile = options.directory+file+'/package.json';
                 fs.exists(packageFile, function(exists){ 
@@ -58,6 +59,8 @@ ManifestBuilder.prototype = {
             },
             waitSeconds: 15
         };
+        var output = {
+        };
         var handlers = {
             css : function(file, done){
                 done(undefined, 'css!'+file);
@@ -92,14 +95,15 @@ ManifestBuilder.prototype = {
         
         var transcode = {
             less : {
+                set : function(name, value){
+                    glob[name] = value;
+                },
                 css : function(file, callback){
                     readFile(file, function(err, body, path, typeless){
                         if(file[0] === '.') file = file.substring(1);
-                        //var fullpath = path + file;
                         var dir = path;
                         file = file.split('/');
                         file = file.pop();
-                        //if(fullpath.substring(-1))
                         var paths = ['.', dir];
                         fs.realpath(dir, symlinkCache, function (err, resolvedPath) {
                             paths = ['.', resolvedPath];
@@ -109,7 +113,6 @@ ManifestBuilder.prototype = {
                                 relativeUrls : true,
                                 filename: resolvedPath+'/'+file // Specify a filename, for better error messages
                             });
-                            //console.log(parser);
                             parser.parse(body, function (error, tree) {
                                 var newFile = file+'.css';
                                 if(error){
@@ -130,6 +133,8 @@ ManifestBuilder.prototype = {
                                         writeFile(newFile, '/* ERROR : '+ex.message+'*'+'/', callback);
                                     }
                                 }
+                            },{ //target, callback, options... WTF?
+                                modifyVars: glob
                             });
                         }catch(ex){
                             console.log(ex);
@@ -191,17 +196,61 @@ ManifestBuilder.prototype = {
         var endsWith = function(substr, str){
             return str.substring(str.length - substr.length) === substr;
         };
+        
+        var handlePolymer = function(module, path, complete){
+            if(!output) throw new Error('No output in scope!');
+            if(!output.polymer) output.polymer = [];
+            var location = 'polymer/cache/'+module.name+'.polymer.html';
+            fs.exists(location, function(exists){
+                if(exists){
+                    output.polymer.push(module.name);
+                    if(complete) complete();
+                }else{
+                    if(!module.polymer.template) throw new Error('Polymer template for '+module.name+' not found!');
+                    if(!module.polymer.script) throw new Error('Polymer script for '+module.name+' not found!');
+                    if(!module.polymer.style) throw new Error('Polymer style for '+module.name+' not found!');
+                    var template = fs.readFileSync('./node_modules/'+module.name+'/'+module.polymer.template);
+                    var script = fs.readFileSync('./node_modules/'+module.name+'/'+module.polymer.script);
+                    var style = fs.readFileSync('./node_modules/'+module.name+'/'+module.polymer.style);
+                    var definitionLines = [
+                        '<!-- Define element -->',
+                        '<polymer-element name="'+module.name+'" attributes="'+(
+                            module.attributes?(module.attributes.join?module.attributes.join(','):module.attributes):''
+                        )+'" constructor="Testu">',
+                            '<template>',
+                                '<style>'+style+'</style>',
+                                template,
+                            '</template>',
+                            '<script>',
+                                script,
+                            '</script>',
+                        '</polymer-element>'
+                    ];
+                    fs.writeFile(location, definitionLines.join("\n"), function(err){
+                        if(!err){
+                            output.polymer.push(module.name);
+                        }
+                        if(complete) complete();
+                    });
+                }
+            });
+        };
+        
         var ob = this;
         var iterator = 'forEachEmission';
         this.localModules(function(err, modules){
             var moduleNames = Object.keys(modules);
             var FNs = [];
             arrays[iterator](moduleNames, function(name, key, complete){
-                var moduleName = modules[name].browserMain || modules[name].browserify || modules[name].main || 'index.js';
-                var nn = (moduleName.substr(-3, 3).toLowerCase() === '.js') ? 
-                    moduleName.substr(0, moduleName.length-3) :
-                    moduleName;
-                entries.paths[name] = modules[name].location+nn;
+                if(modules[name].polymer){
+                    handlePolymer(modules[name], complete);
+                }else{
+                    var moduleName = modules[name].browserMain || modules[name].browserify || modules[name].main || 'index.js';
+                    var nn = (moduleName.substr(-3, 3).toLowerCase() === '.js') ? 
+                        moduleName.substr(0, moduleName.length-3) :
+                        moduleName;
+                    entries.paths[name] = modules[name].location+nn;
+                }
                 var shim = {};
                 if(modules[name].resources){
                     arrays[iterator](modules[name].resources, function(resource, index, done){
@@ -212,18 +261,14 @@ ManifestBuilder.prototype = {
                                 handlers[typeName]('./node_modules/'+name+'/'+resource, function(err, shimPath){
                                     if(!shim.deps) shim.deps = [];
                                     shim.deps[index] = shimPath;
-                                    //console.log('handled '+resource, shim.deps.length);
                                     done();
                                 });
                             }
                         });
-                        //console.log('handling '+resource, found, modules[name].resources.length);
                         if(!found){
-                            //console.log('short circuit');
                             done(); //short circuit if we don't understand the type
                         }
                     }, function(){
-                        //console.log('something');
                         if(shim.deps) entries.shim[name] = shim;
                         var lines = [];
                         if(options.process === true && modules[name].extensions){
@@ -271,7 +316,7 @@ ManifestBuilder.prototype = {
                         entries = entries.replace('"[['+index+']]"', fn.toString());
                     });
                 }
-                callback(undefined, entries);
+                callback(undefined, entries, output);
             });
         });
     },
@@ -284,8 +329,8 @@ ManifestBuilder.prototype = {
         buildManifest(function(error, manifest){
             fs.writeFile(filename, JSON.stringify(manifest), function(err){
                 if(callback) callback(error || err, manifest);
-            })
-        })
+            });
+        });
     },
     renderMetaStylesToCSS : function(handler, callback){
         this.localModules(function(err, modules){
@@ -367,6 +412,9 @@ ManifestBuilder.prototype = {
                     callback(body);
                 }, 1);
         }
+    },
+    lessSet : function(name, value){
+        glob[name] = value;
     }
     //TODO: handle wrapping commonjs -> UMD
 }
