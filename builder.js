@@ -7,36 +7,56 @@ var sass = require('node-sass');
 function ManifestBuilder(options){
     this.options = options || {};
     this.cache = {};
+    this.sticky = []; // an array of arrays determining modules that will be co-bundled
 }
 var lessCache = {};
 var polymerCache = {};
 var glob = {};
+/*
+ * options.directory : the project root
+ *
+ */
+
 ManifestBuilder.prototype = {
     constructor : ManifestBuilder,
     localModules : function(options, callback){
+        var dirOverride = !!this.options.modulesPath;
         if(typeof options == 'function'){
             callback = options;
-            options = { directory : (options.directory || './')+'node_modules/' };
+            options = {
+                directory : this.options.modulesPath || (
+                    (this.options.directory || './')+'node_modules/'
+                )
+            };
+            this.directory = options.directory;
         }
         var modules = {};
+        //console.log('DD', options.directory, process.cwd());
         fs.readdir(options.directory, function(err, files){
             if(err) throw err;
             arrays.forAllEmissions(files, function(file, index, done){
+                if(file[0] === '.') return done();
                 var packageFile = options.directory+file+'/package.json';
                 fs.exists(packageFile, function(exists){ 
                     if(exists){
                         fs.readFile(packageFile, function(err, body){
-                            var pkg = JSON.parse(body);
-                            modules[file] = pkg;
-                            pkg.location = options.directory+file+'/';
-                            done();
+                            try{
+                                var pkg = JSON.parse(body);
+                                modules[file] = pkg;
+                                pkg.path = options.directory+file+'/';
+                                //if we're not overriding the dir we are in a module looking at it's children
+                                pkg.location = (dirOverride?'':'node_modules/')+file+'/';
+                                done();
+                            }catch(ex){
+                                done();
+                            }
                         });
                     }else{
                         done();
                     }
                 });
                 //todo: handle lone .js files
-            }, function(){
+            }, function(err){
                 callback(undefined, modules);
             });
         });
@@ -49,6 +69,7 @@ ManifestBuilder.prototype = {
             callback = options;
             options = {};
         }
+        //console.log('BuM', options, callback)
         if(options.cacheable && this.cache[process.cwd()]) return this.cache[process.cwd()];
         var entries = {
             //baseUrl: "/another/path",
@@ -100,6 +121,9 @@ ManifestBuilder.prototype = {
                 },
                 css : function(file, callback){
                     readFile(file, function(err, body, path, typeless){
+                        if(err){
+                            return writeFile(file, '/* ERROR : '+err.message+'*'+'/', callback);
+                        }
                         if(file[0] === '.') file = file.substring(1);
                         var dir = path;
                         file = file.split('/');
@@ -107,39 +131,39 @@ ManifestBuilder.prototype = {
                         var paths = ['.', dir];
                         fs.realpath(dir, symlinkCache, function (err, resolvedPath) {
                             paths = ['.', resolvedPath];
-                        try{
-                            var parser = new(less.Parser)({
-                                paths: paths, // Specify search paths for @import directives
-                                relativeUrls : true,
-                                filename: resolvedPath+'/'+file // Specify a filename, for better error messages
-                            });
-                            parser.parse(body, function (error, tree) {
-                                var newFile = file+'.css';
-                                if(error){
-                                    console.log('LESS rendering error!');
-                                    console.log(error);
-                                    writeFile(newFile, '/* ERROR : '+error.message+'*'+'/', callback);
-                                }else{
-                                    try{
-                                        writeFile(
-                                            newFile, 
-                                            tree.toCSS({ compress: options.compact || false }), 
-                                            callback, 
-                                            'css!'
-                                        );
-                                        console.log('RENDERED LESS: '+newFile);
-                                    }catch(ex){
-                                        console.log(ex);
-                                        writeFile(newFile, '/* ERROR : '+ex.message+'*'+'/', callback);
+                            try{
+                                var parser = new(less.Parser)({
+                                    paths: paths, // Specify search paths for @import directives
+                                    relativeUrls : true,
+                                    filename: resolvedPath+'/'+file // Specify a filename, for better error messages
+                                });
+                                parser.parse(body, function (error, tree) {
+                                    var newFile = file+'.css';
+                                    if(error){
+                                        console.log('LESS rendering error!');
+                                        console.log(error);
+                                        writeFile(newFile, '/* ERROR : '+error.message+'*'+'/', callback);
+                                    }else{
+                                        try{
+                                            writeFile(
+                                                newFile, 
+                                                tree.toCSS({ compress: options.compact || false }), 
+                                                callback, 
+                                                'css!'
+                                            );
+                                            console.log('RENDERED LESS: '+newFile);
+                                        }catch(ex){
+                                            console.log(ex);
+                                            writeFile(newFile, '/* ERROR : '+ex.message+'*'+'/', callback);
+                                        }
                                     }
-                                }
-                            },{ //target, callback, options... WTF?
-                                modifyVars: glob
-                            });
-                        }catch(ex){
-                            console.log(ex);
-                            handler(file, '/* ERROR : '+ex.message+'*'+'/', callback);
-                        }
+                                },{ //target, callback, options... WTF?
+                                    modifyVars: glob
+                                });
+                            }catch(ex){
+                                console.log(ex);
+                                writeFile(file, '/* ERROR : '+ex.message+'*'+'/', callback);
+                            }
                         });
                     });
                 }
@@ -238,7 +262,9 @@ ManifestBuilder.prototype = {
         
         var ob = this;
         var iterator = 'forEachEmission';
+        //console.log('#####');
         this.localModules(function(err, modules){
+            //console.log('LM', Object.keys(modules));
             var moduleNames = Object.keys(modules);
             var FNs = [];
             arrays[iterator](moduleNames, function(name, key, complete){
@@ -412,6 +438,28 @@ ManifestBuilder.prototype = {
                     callback(body);
                 }, 1);
         }
+    },
+    realPath : function(path, callback){
+        //todo: handle if we have the dir substring already
+        if(path[0] !== '/' || this.directory === '') return callback(path); //if not an absolute path, we're done
+        var parts = (path || '').split('/');
+        parts.shift();
+        var firstPart = parts.shift();
+        //todo: cache existence
+        var ob = this;
+        var filepath = (ob.directory+'/'+firstPart).replace(/\/+/g, '/');
+        fs.exists(filepath, function(exists){
+            if(exists) callback('/'+ob.directory+'/'+path);
+            else callback(path);
+        });
+    },
+    modulesPath : function(path){
+        this.options.modulesPath = path;
+        this.directory = path;
+    },
+    setModuleRoot : function(path){
+        this.options.modulesPath = path;
+        this.directory = path;
     },
     lessSet : function(name, value){
         glob[name] = value;
