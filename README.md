@@ -1,7 +1,7 @@
 requirejs-manifest-builder.js
 =============================
 
-NPM is such a versatile solution, of course it works for frontend resources, so here's a requirejs manifest generator so you can register all those node modules right where they live. It scans the node_modules directory in the project root(non-recursively) and generates the manfest for require.js (resource loading requires the requirejs css plugin).
+NPM is such a versatile solution, of course it works for frontend resources, so here's a requirejs manifest generator so you can register all those node modules right where they live. It will find at module at or above the project root, and generates the manfest for require.js (resource loading requires the requirejs css plugin).
 
 This is intended for use in an application framework, or as part of a build process.
 
@@ -24,6 +24,9 @@ To include non-UMD js or css add it to an array in the(nonstandard) `resources` 
 - **[SCSS](http://sass-lang.com/)** : If you include a .scss asset it will be rendered and stored in an in-memory cache, then shipped to the client as css
 - **[LESS](http://lesscss.org/)** : If you include a .less asset it will be rendered and stored in an in-memory cache, then shipped to the client as css
 - **[JS](http://www.w3.org/standards/webdesign/script)** : Any .js included is loaded as a browser global, allowing you to both have a place to do anything you need to do freestyle, as well as enabling drop-in compatibility for older scripts
+
+**Future Resources**
+
 
 Upcoming extended functionality can be had with a slightly modified [UMD wrapper](https://github.com/umdjs/umd/blob/master/returnExports.js), so you can have user extendable resources(primarily for client-side modules).
 	
@@ -57,8 +60,6 @@ Upcoming extended functionality can be had with a slightly modified [UMD wrapper
 	    // can return a function as the exported value.
 	    return {};
 	}));
-	
-**Future Resources**
 
 The module encapsulation is designed to load a diverse array of resources for the purpose of encapsulation and preemtion. Your component can now finally own it's own styles, templates, etc. without taking the freedom to modify away from implementers.. all while retaining drop-in upgrading! This is the range of support I plan to offer:
 
@@ -86,6 +87,8 @@ So you can override the default resources in the module with your own.
 Polymer
 -------
 
+** note : requirejs-manifest-builder just had a large reworking, the polymer functionality remains untested **
+
 In addition to requirejs configuration, you can also output your modules as [Polymer](https://www.polymer-project.org/) components. This is done via the nonstandard `polymer` entry in the package.json. An example would look like:
 
     polymer : {
@@ -100,14 +103,8 @@ note that constructor is not an option and is based on the package.json's name f
 
 Any components from the process will be in `output.polymer` and can then be dropped onto the index page.
 
-Custom Module Root
-------------------
-`requirejs-manifest-builder` naturally indexes the `node_modules` directory in your root module, but if you need to use a different root, it supports that as well. 
-
-In the application you need to set the `moduleRoot` of the object:
-
-	//set modules to be in the same directory
-	instance.setModuleRoot('../');
+server side module paths
+------------------------
 
 Then when resolving paths inside your application:
 

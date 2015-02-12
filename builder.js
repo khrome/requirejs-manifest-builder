@@ -12,10 +12,77 @@ function ManifestBuilder(options){
 var lessCache = {};
 var polymerCache = {};
 var glob = {};
-/*
- * options.directory : the project root
- *
- */
+
+var modulePath = function(name){
+    var path = '[not found]';
+    try{
+        path = require.resolve(name).split('/');
+        while(path.length && path[path.length - 1] != name){
+            path.pop();
+        }
+        path = path.join('/')+'/';
+    }catch(ex){}
+    return path;
+}
+
+var breakupTarget = function(path){ //switched from split/regex to split/scan
+    var result = {
+        root : {path : ''},
+        target : {path : ''},
+        toTarget : function(){
+            return result.toRootTarget()+
+            (result.root.path?('/'+result.root.path):'')+
+            (result.target.module?('/'+result.target.module):'')+
+            (result.target.path?('/'+result.target.path):'');
+        },
+        toRootTarget : function(){
+            return '::'+result.toRoot();
+        },
+        toRoot : function(){
+            return (result.root.module?result.root.module:'');
+        },
+        toRootPath : function(){
+            return (result.root.module?modulePath(result.root.module):process.cwd());
+        },
+        toTargetPath : function(){
+            return result.toRootPath()+
+            (result.root.path?('/'+result.root.path):'')+
+            (result.target.module?('/'+result.target.module):'');
+        },
+        toPath : function(){
+            return result.toTargetPath()+
+            (result.target.path?('/'+result.target.path):'');
+        }
+    };
+    var parts = path.split('/');
+    var module_trigger;
+    var path = '';
+    for(var lcv=0; lcv < parts.length; lcv++){
+        if(module_trigger){
+            result.target.module = parts[lcv];
+            module_trigger = false;
+            result.root.path += (result.root.path?'/':'')+path;
+            path = '';
+        }else{
+            if(result.root.module !== '' && !result.root.module){
+                result.root.module = parts[lcv];
+            }else{
+                path += (path?'/':'')+parts[lcv];
+                if(parts[lcv] == 'node_modules'){
+                    module_trigger = true;
+                    continue;
+                }else{
+                    result.target.path += (result.target.path?'/':'')+path;
+                    path = '';
+                }
+            }
+        }
+    }
+    //now we have all the path we've seen since our last sighted module
+    result.target.path = path;
+    if(path.indexOf('jquery') !== -1) console.log('***', result);
+    return result;
+};
 
 ManifestBuilder.prototype = {
     constructor : ManifestBuilder,
@@ -31,35 +98,50 @@ ManifestBuilder.prototype = {
             this.directory = options.directory;
         }
         var modules = {};
-        //console.log('DD', options.directory, process.cwd());
-        fs.readdir(options.directory, function(err, files){
-            if(err) throw err;
-            arrays.forAllEmissions(files, function(file, index, done){
-                if(file[0] === '.') return done();
-                var packageFile = options.directory+file+'/package.json';
+        if(options.dependencies){ //referencing the module
+            arrays.forAllEmissions(options.dependencies, function(name, index, done){
+                // LEGAL PATHS : 
+                // /some/absolute/path/from/app/root
+                // <amodule>
+                // <amodule>/some/script/path
+                // <amodule>/node_modules/<someothermodule>
+                // <amodule>/node_modules/<someothermodule>/some/script/path
+                var parts = breakupTarget(name);
+                var packageFile = parts.toRootPath()+'package.json';
                 fs.exists(packageFile, function(exists){ 
                     if(exists){
                         fs.readFile(packageFile, function(err, body){
                             try{
                                 var pkg = JSON.parse(body);
-                                modules[file] = pkg;
-                                pkg.path = options.directory+file+'/';
-                                //if we're not overriding the dir we are in a module looking at it's children
-                                pkg.location = (dirOverride?'':'node_modules/')+file+'/';
+                                modules[parts.toRoot()] = pkg;
+                                pkg.rjsmb = parts;
+                                pkg.location = parts.toTarget();
                                 done();
                             }catch(ex){
+                                console.log('ERROR', ex);
                                 done();
                             }
                         });
-                    }else{
-                        done();
+                    }else{ //this must be an absolute path
+                        fs.exists(parts.toPath(), function(exists){ 
+                            if(exists){
+                                var pkg = {};
+                                pkg.name = name;
+                                modules[name] = pkg;
+                                pkg.rjsmb = parts;
+                                pkg.location = parts.toTarget();
+                                done();
+                            }else{
+                                console.log(new Error('module not found:'+name));
+                                done();
+                            }
+                        });
                     }
                 });
-                //todo: handle lone .js files
             }, function(err){
                 callback(undefined, modules);
             });
-        });
+        }
     },
     expandDependencies : function(){
         
@@ -69,7 +151,6 @@ ManifestBuilder.prototype = {
             callback = options;
             options = {};
         }
-        //console.log('BuM', options, callback)
         if(options.cacheable && this.cache[process.cwd()]) return this.cache[process.cwd()];
         var entries = {
             //baseUrl: "/another/path",
@@ -233,9 +314,9 @@ ManifestBuilder.prototype = {
                     if(!module.polymer.template) throw new Error('Polymer template for '+module.name+' not found!');
                     if(!module.polymer.script) throw new Error('Polymer script for '+module.name+' not found!');
                     if(!module.polymer.style) throw new Error('Polymer style for '+module.name+' not found!');
-                    var template = fs.readFileSync('./node_modules/'+module.name+'/'+module.polymer.template);
-                    var script = fs.readFileSync('./node_modules/'+module.name+'/'+module.polymer.script);
-                    var style = fs.readFileSync('./node_modules/'+module.name+'/'+module.polymer.style);
+                    var template = fs.readFileSync(module.rjsmb.toRootPath()+'/'+module.polymer.template);
+                    var script = fs.readFileSync(module.rjsmb.toRootPath()+'/'+module.polymer.script);
+                    var style = fs.readFileSync(module.rjsmb.toRootPath()+'/'+module.polymer.style);
                     var definitionLines = [
                         '<!-- Define element -->',
                         '<polymer-element name="'+module.name+'" attributes="'+(
@@ -262,20 +343,20 @@ ManifestBuilder.prototype = {
         
         var ob = this;
         var iterator = 'forEachEmission';
-        //console.log('#####');
-        this.localModules(function(err, modules){
-            //console.log('LM', Object.keys(modules));
+        this.localModules(options, function(err, modules){
             var moduleNames = Object.keys(modules);
             var FNs = [];
             arrays[iterator](moduleNames, function(name, key, complete){
                 if(modules[name].polymer){
                     handlePolymer(modules[name], complete);
                 }else{
-                    var moduleName = modules[name].browserMain || modules[name].browserify || modules[name].main || 'index.js';
+                    var moduleName = modules[name].isFile?'':(
+                        modules[name].browserMain || modules[name].browserify || modules[name].main || 'index.js'
+                    );
                     var nn = (moduleName.substr(-3, 3).toLowerCase() === '.js') ? 
                         moduleName.substr(0, moduleName.length-3) :
                         moduleName;
-                    entries.paths[name] = modules[name].location+nn;
+                    entries.paths[name] = modules[name].location+'/'+nn;
                 }
                 var shim = {};
                 if(modules[name].resources){
@@ -284,7 +365,9 @@ ManifestBuilder.prototype = {
                         Object.keys(handlers).forEach(function(typeName){
                             if(endsWith('.'+typeName, resource.toLowerCase())){
                                 found = true;
-                                handlers[typeName]('./node_modules/'+name+'/'+resource, function(err, shimPath){
+                                var path = modules[name].rjsmb.toRootTarget()+'/'+resource;
+                                if(path.lastIndexOf('::') > 1) path = path.substring(path.lastIndexOf('::'));
+                                handlers[typeName](path, function(err, shimPath){
                                     if(!shim.deps) shim.deps = [];
                                     shim.deps[index] = shimPath;
                                     done();
@@ -364,7 +447,7 @@ ManifestBuilder.prototype = {
                 if(modules[name].resources) modules[name].resources.forEach(function(resource){
                     if(resource.substr(resource.length -5, resource.length).toLowerCase() == '.less'){
                         fs.readFile(resource, function(err, body){
-                            body = body.toString()
+                            body = body.toString();
                             var path = process.cwd()+resource;
                             var parts = path.split('/');
                             parts.pop();
@@ -440,18 +523,31 @@ ManifestBuilder.prototype = {
         }
     },
     realPath : function(path, callback){
-        //todo: handle if we have the dir substring already
-        if(path[0] !== '/' || this.directory === '') return callback(path); //if not an absolute path, we're done
-        var parts = (path || '').split('/');
-        parts.shift();
-        var firstPart = parts.shift();
-        //todo: cache existence
-        var ob = this;
-        var filepath = (ob.directory+'/'+firstPart).replace(/\/+/g, '/');
-        fs.exists(filepath, function(exists){
-            if(exists) callback('/'+ob.directory+'/'+path);
-            else callback(path);
-        });
+        if(path[0] && path[1] && path[2] && path[0] == '/' && path[1] == ':'&& path[2] == ':'){
+            //the new way: relative to the module root '::<module name>'
+            var parts = path.substring(1).split('/');
+            var module = parts.shift().substring(2);
+            var moduleMain = require.resolve(module);
+            var moduleDir = moduleMain.split('/');
+            while(moduleDir.length && moduleDir[moduleDir.length-1] !== module){
+                moduleDir.pop();
+            }
+            moduleDir = moduleDir.join('/');
+            return callback(moduleDir+'/'+parts.join('/'));
+        }else{
+            //todo: handle if we have the dir substring already
+            if(path[0] !== '/' || this.directory === '') return callback(path); //if not an absolute path, we're done
+            var parts = (path || '').split('/');
+            parts.shift();
+            var firstPart = parts.shift();
+            //todo: cache existence
+            var ob = this;
+            var filepath = (ob.directory+'/'+firstPart).replace(/\/+/g, '/');
+            fs.exists(filepath, function(exists){
+                if(exists) callback('/'+ob.directory+'/'+path);
+                else callback(process.cwd()+path);
+            });
+        }
     },
     modulesPath : function(path){
         this.options.modulesPath = path;
