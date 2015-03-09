@@ -1,8 +1,8 @@
 var arrays = require('async-arrays');
 var objects = require('async-objects');
 var fs = require('fs');
-var less = require('less');
-var sass = require('node-sass');
+var less;
+var sass;
 
 function ManifestBuilder(options){
     this.options = options || {};
@@ -201,6 +201,7 @@ ManifestBuilder.prototype = {
                     glob[name] = value;
                 },
                 css : function(file, callback){
+                    if(!less) less = require('less');
                     readFile(file, function(err, body, path, typeless){
                         if(err){
                             return writeFile(file, '/* ERROR : '+err.message+'*'+'/', callback);
@@ -251,6 +252,7 @@ ManifestBuilder.prototype = {
             },
             scss : {
                 css : function(file, callback){
+                    if(!sass) sass = require('node-sass');
                     readFile(file, function(err, body, path, typeless){
                         var fullpath = path + file;
                         try{

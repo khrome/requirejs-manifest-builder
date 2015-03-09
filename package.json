@@ -1,7 +1,7 @@
 {
     "name": "requirejs-manifest-builder",
     "homepage": "https://github.com/khrome/requirejs-manifest-builder",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "main": "builder.js",
     "description": "A utility for mapping a set of UMD NPMs into a requirejs config file or polymer components",
     "keywords": [
@@ -20,7 +20,9 @@
     },
     "dependencies": {
         "async-objects": "*",
-        "async-arrays": "*",
+        "async-arrays": "*"
+    },
+    "optionalDependencies": {
         "less": "*",
         "node-sass": "*"
     },
@@ -30,8 +32,6 @@
     },
     "bin" : {
         "jsmanifest" : "./bin/jsmanifest.js"
-    },
-    "optionalDependencies": {
     },
     "engines": {
         "node": "*"
